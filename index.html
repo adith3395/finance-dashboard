@@ -331,21 +331,8 @@
 
     <!-- JavaScript Logic -->
     <script>
-	const STORAGE_KEY = 'pelacakKeuangan_v1';
-
         // --- State Management ---
         const state = {
-		function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function loadState() {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-        const parsed = JSON.parse(saved);
-        Object.assign(state, parsed);
-    }
-}
             transactions: [
                 // Sample data matching guide scenario "Oct-2023"
                 { id: 1, date: '2023-10-01', desc: 'Gaji Bulanan', category: 'Gaji', type: 'income', amount: 5500000 },
@@ -371,8 +358,7 @@ function loadState() {
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
-            loadState();
-			initMonthSelector();
+            initMonthSelector();
             setTransactionType('expense'); // Init form UI
             updateUI(); // Initial render
         });
@@ -629,15 +615,13 @@ function loadState() {
 
             select.addEventListener('change', (e) => {
                 state.currentMonth = e.target.value;
-                saveState();
-				updateUI();
+                updateUI();
             });
         }
 
         // Form Type Toggles
         function setTransactionType(type) {
             state.formType = type;
-			saveState();
             const btnIn = document.getElementById('btnIncome');
             const btnOut = document.getElementById('btnExpense');
             
@@ -676,12 +660,6 @@ function loadState() {
             };
 
             state.transactions.push(newTx);
-			saveState();
-			if (monthKey !== state.currentMonth) {
-			state.currentMonth = monthKey;
-			initMonthSelector();
-			}
-			updateUI();
             
             // If the date added is in a new month not in selector, refresh selector
             const monthKey = date.slice(0, 7);
@@ -702,8 +680,7 @@ function loadState() {
         function deleteTransaction(id) {
             if(confirm("Hapus transaksi ini?")) {
                 state.transactions = state.transactions.filter(t => t.id !== id);
-                saveState();
-				updateUI();
+                updateUI();
             }
         }
 
@@ -720,7 +697,6 @@ function loadState() {
             if(goal && budget) {
                 state.settings.goal = goal;
                 state.settings.budgetLimit = budget;
-				saveState();
                 updateUI();
                 toggleSettings();
             }
