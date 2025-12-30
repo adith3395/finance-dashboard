@@ -331,6 +331,22 @@
 
     <!-- JavaScript Logic -->
     <script>
+	const STORAGE_KEY = 'pelacakKeuangan_v1';
+		function loadState() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (saved) {
+        // 👉 PAKAI DATA USER
+        const parsed = JSON.parse(saved);
+        Object.assign(state, parsed);
+    } else {
+        // 👉 PERTAMA KALI RUN → SIMPAN DEFAULT
+        saveState();
+    }
+}
+function saveState() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
         // --- State Management ---
         const state = {
             transactions: [
@@ -358,10 +374,12 @@
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
-            initMonthSelector();
-            setTransactionType('expense'); // Init form UI
-            updateUI(); // Initial render
-        });
+			loadState();          // ⬅️ KUNCI UTAMA
+			initMonthSelector();
+			setTransactionType(state.formType);
+			updateUI();
+		});
+
 
         // --- Core Logic & Data Processing ---
 
