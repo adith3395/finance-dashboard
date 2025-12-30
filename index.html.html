@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplikasi Pelacak Keuangan Otomatis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f5f5f4; /* Warm neutral (stone-100) */
+            color: #1c1917; /* stone-900 */
+        }
+
+        /* Chart Container Styling per Requirements */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px;
+        }
+        
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 350px;
+            }
+        }
+
+        /* Print Mode Styling */
+        @media print {
+            body { background-color: white; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .card { box-shadow: none; border: 1px solid #ddd; }
+            .chart-container { height: 250px; page-break-inside: avoid; }
+        }
+
+        .print-only { display: none; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #e7e5e4; }
+        ::-webkit-scrollbar-thumb { background: #a8a29e; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #78716c; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Chosen Palette: Warm Neutrals (Stone) with Semantic Accents (Emerald/Rose/Blue) -->
+    <!-- Application Structure Plan: 
+         1. Header: Navigation, settings toggle, print button.
+         2. Dashboard Overview: KPI Cards (Income, Expense, Balance) for immediate status.
+         3. Analysis Section: Visualizes the "Dashboard_Rekap" sheet logic (Budget Health & Goals).
+         4. Visualization Grid: Charts mimicking the Excel diagrams (Bar & Pie).
+         5. Transaction Management: Input form and Data Table mimicking "Data_Harian" sheet.
+         Rationale: This structure follows a "Insight first, Action second" flow. Users see their health immediately, then drill down into charts, and finally manage the raw data.
+    -->
+    <!-- Visualization & Content Choices:
+         - KPI Cards: HTML/Text. Goal: Immediate financial snapshot. Interaction: None (updates on data change).
+         - Budget Health Indicator: CSS styled div with conditional classes. Goal: replicate Excel IF formula visually.
+         - Savings Goal: HTML Progress bar. Goal: replicate Excel Data Bar.
+         - Income vs Expense: Chart.js Bar Chart. Goal: Compare monthly flow. Interaction: Hover for exact values.
+         - Expense Breakdown: Chart.js Doughnut Chart. Goal: Visualize categorical spend. Interaction: Click legend to toggle categories.
+         - Transaction List: HTML Table. Goal: View/Edit raw data. Interaction: Delete button.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <!-- Header -->
+    <header class="bg-stone-800 text-stone-50 shadow-md p-4 sticky top-0 z-50 no-print">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-2">
+                <span class="text-2xl">💰</span>
+                <h1 class="text-xl font-bold tracking-wide">Pelacak Keuangan Otomatis</h1>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-3">
+                <!-- Month Filter -->
+                <div class="flex items-center bg-stone-700 rounded px-3 py-1.5">
+                    <span class="text-stone-300 text-sm mr-2">📅 Periode:</span>
+                    <select id="monthFilter" class="bg-transparent text-white text-sm focus:outline-none cursor-pointer font-semibold">
+                        <!-- Populated by JS -->
+                    </select>
+                </div>
+
+                <!-- Settings Toggle -->
+                <button onclick="toggleSettings()" class="bg-stone-600 hover:bg-stone-500 text-white px-3 py-1.5 rounded text-sm transition flex items-center gap-1">
+                    ⚙️ Pengaturan
+                </button>
+
+                <!-- Print Button -->
+                <button onclick="window.print()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded text-sm font-bold transition shadow-sm">
+                    🖨️ Cetak Laporan
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Modal (Hidden by default) -->
+    <div id="settingsPanel" class="hidden bg-white border-b border-stone-200 p-6 no-print shadow-inner">
+        <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="space-y-2">
+                <label class="block text-sm font-semibold text-stone-600">🎯 Target Tabungan (Rp)</label>
+                <input type="number" id="settingGoal" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-emerald-500 focus:outline-none" value="2000000">
+                <p class="text-xs text-stone-500">Nilai referensi untuk Progress Bar.</p>
+            </div>
+            <div class="space-y-2">
+                <label class="block text-sm font-semibold text-stone-600">🚧 Batas Anggaran / Budget (Rp)</label>
+                <input type="number" id="settingBudget" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-rose-500 focus:outline-none" value="3000000">
+                <p class="text-xs text-stone-500">Nilai batas untuk indikator "Over Budget".</p>
+            </div>
+            <div class="md:col-span-2 flex justify-end">
+                <button onclick="saveSettings()" class="bg-stone-800 text-white px-6 py-2 rounded hover:bg-stone-700 transition">Simpan & Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4 md:p-6 max-w-7xl mx-auto w-full space-y-8">
+
+        <!-- Print Header (Visible only when printing) -->
+        <div class="print-only text-center border-b-2 border-stone-800 pb-4 mb-8">
+            <h1 class="text-3xl font-bold uppercase text-stone-900">Laporan Keuangan Bulanan</h1>
+            <p class="text-stone-600 mt-2" id="printDatePeriod">Periode: -</p>
+        </div>
+
+        <!-- Section 1: Dashboard Overview (KPIs) -->
+        <section>
+            <div class="mb-4">
+                <h2 class="text-xl font-bold text-stone-800 border-l-4 border-emerald-500 pl-3">Ringkasan Bulan Ini</h2>
+                <p class="text-stone-500 text-sm mt-1">Gambaran cepat kondisi keuangan Anda berdasarkan transaksi yang tercatat.</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- Income Card -->
+                <div class="card bg-white p-5 rounded-xl shadow-sm border-t-4 border-emerald-500 flex flex-col justify-between h-32">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Total Pemasukan</p>
+                            <h3 id="totalIncomeDisplay" class="text-2xl font-bold text-stone-800 mt-1">Rp 15000000</h3>
+                        </div>
+                        <span class="text-2xl bg-emerald-100 p-2 rounded-lg">📈</span>
+                    </div>
+                    <p class="text-xs text-stone-400">Total arus kas masuk.</p>
+                </div>
+
+                <!-- Expense Card -->
+                <div class="card bg-white p-5 rounded-xl shadow-sm border-t-4 border-rose-500 flex flex-col justify-between h-32">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-rose-600 uppercase tracking-wider">Total Pengeluaran</p>
+                            <h3 id="totalExpenseDisplay" class="text-2xl font-bold text-stone-800 mt-1">Rp 7500000</h3>
+                        </div>
+                        <span class="text-2xl bg-rose-100 p-2 rounded-lg">📉</span>
+                    </div>
+                    <p class="text-xs text-stone-400">Total arus kas keluar.</p>
+                </div>
+
+                <!-- Balance Card -->
+                <div class="card bg-white p-5 rounded-xl shadow-sm border-t-4 border-blue-500 flex flex-col justify-between h-32">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-blue-600 uppercase tracking-wider">Sisa Saldo</p>
+                            <h3 id="balanceDisplay" class="text-2xl font-bold text-stone-800 mt-1">Rp 0</h3>
+                        </div>
+                        <span class="text-2xl bg-blue-100 p-2 rounded-lg">💰</span>
+                    </div>
+                    <p class="text-xs text-stone-400">Pemasukan dikurangi pengeluaran.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Analysis & Health Indicators -->
+        <section class="bg-white rounded-xl shadow-sm p-6 border border-stone-200">
+            <div class="mb-6">
+                <h2 class="text-xl font-bold text-stone-800 border-l-4 border-blue-500 pl-3">Analisis Kesehatan Keuangan</h2>
+                <p class="text-stone-500 text-sm mt-1">Indikator otomatis berdasarkan target tabungan dan batas anggaran yang Anda tetapkan.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Budget Status Indicator -->
+                <div class="bg-stone-50 rounded-lg p-4 border border-stone-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-semibold text-stone-700">Status Anggaran (Budget)</span>
+                        <span id="budgetStatusBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-gray-200 text-gray-600">--</span>
+                    </div>
+                    <div class="relative w-full bg-stone-200 rounded-full h-4 overflow-hidden">
+                        <div id="budgetProgressBar" class="absolute top-0 left-0 h-full bg-emerald-500 transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-stone-500 mt-2">
+                        <span id="budgetUsedText">Terpakai: Rp 0</span>
+                        <span id="budgetLimitText">Limit: Rp 0</span>
+                    </div>
+                </div>
+
+                <!-- Savings Goal Progress -->
+                <div class="bg-stone-50 rounded-lg p-4 border border-stone-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-semibold text-stone-700">Pencapaian Target Tabungan</span>
+                        <span id="savingsPercentage" class="text-blue-600 font-bold text-sm">0%</span>
+                    </div>
+                    <div class="relative w-full bg-stone-200 rounded-full h-4 overflow-hidden">
+                        <div id="savingsProgressBar" class="absolute top-0 left-0 h-full bg-blue-500 transition-all duration-700" style="width: 0%"></div>
+                    </div>
+                    <div class="flex justify-between text-xs text-stone-500 mt-2">
+                        <span id="currentSavingsText">Terkumpul: Rp 0</span>
+                        <span id="goalText">Target: Rp 0</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Data Visualization -->
+        <section>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Bar Chart: Income vs Expense -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <h3 class="font-bold text-stone-700 mb-4 text-center">Perbandingan Pemasukan & Pengeluaran</h3>
+                    <div class="chart-container">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Doughnut Chart: Expense Breakdown -->
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                    <h3 class="font-bold text-stone-700 mb-4 text-center">Distribusi Kategori Pengeluaran</h3>
+                    <div class="chart-container">
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Data Entry & Management -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Input Form (Hidden on Print) -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-stone-200 no-print h-fit">
+                <h3 class="font-bold text-stone-800 mb-4 flex items-center gap-2">
+                    <span class="bg-stone-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">➕</span> 
+                    Input Transaksi
+                </h3>
+                <form id="transactionForm" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-1">Tipe</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" id="btnIncome" onclick="setTransactionType('income')" class="py-2 text-sm font-semibold rounded border border-stone-200 bg-stone-50 text-stone-500 hover:bg-emerald-50 hover:text-emerald-600 transition">Pemasukan</button>
+                            <button type="button" id="btnExpense" onclick="setTransactionType('expense')" class="py-2 text-sm font-semibold rounded border border-stone-200 bg-stone-50 text-stone-500 hover:bg-rose-50 hover:text-rose-600 transition">Pengeluaran</button>
+                        </div>
+                        <input type="hidden" id="formType" value="">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-1">Tanggal</label>
+                        <input type="date" id="formDate" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-stone-500 focus:outline-none" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-1">Deskripsi</label>
+                        <input type="text" id="formDesc" placeholder="Contoh: Beli Bensin" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-stone-500 focus:outline-none" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-1">Kategori</label>
+                        <select id="formCategory" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-stone-500 focus:outline-none bg-white">
+                            <option value="Makanan">Makanan</option>
+                            <option value="Transportasi">Transportasi</option>
+                            <option value="Tempat Tinggal">Tempat Tinggal</option>
+                            <option value="Utilitas">Utilitas (Listrik/Air)</option>
+                            <option value="Kesehatan">Kesehatan</option>
+                            <option value="Hiburan">Hiburan</option>
+                            <option value="Belanja">Belanja</option>
+                            <option value="Gaji">Gaji</option>
+                            <option value="Bonus">Bonus</option>
+                            <option value="Investasi">Investasi</option>
+                            <option value="Lainnya">Lainnya</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-stone-500 uppercase mb-1">Jumlah (Rp)</label>
+                        <input type="number" id="formAmount" placeholder="0" class="w-full p-2 border border-stone-300 rounded focus:ring-2 focus:ring-stone-500 focus:outline-none" required>
+                    </div>
+
+                    <button type="submit" class="w-full bg-stone-800 hover:bg-stone-900 text-white font-bold py-3 rounded shadow-lg transform active:scale-95 transition">Simpan Transaksi</button>
+                </form>
+            </div>
+
+            <!-- Transaction Table -->
+            <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-stone-200 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-stone-200 bg-stone-50 flex justify-between items-center">
+                    <h3 class="font-bold text-stone-800">Riwayat Transaksi ("Data_Harian")</h3>
+                    <span id="recordCount" class="text-xs font-semibold bg-stone-200 text-stone-600 px-2 py-1 rounded">0 Transaksi</span>
+                </div>
+                
+                <div class="overflow-x-auto flex-grow">
+                    <table class="w-full text-sm text-left text-stone-600">
+                        <thead class="text-xs text-stone-500 uppercase bg-stone-100">
+                            <tr>
+                                <th class="px-4 py-3">Tgl</th>
+                                <th class="px-4 py-3">Deskripsi</th>
+                                <th class="px-4 py-3">Kategori</th>
+                                <th class="px-4 py-3 text-right">Masuk (+)</th>
+                                <th class="px-4 py-3 text-right">Keluar (-)</th>
+                                <th class="px-4 py-3 text-center no-print">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionTableBody" class="divide-y divide-stone-100">
+                            <!-- Rows populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Table Footer (Empty State) -->
+                <div id="emptyState" class="hidden p-8 text-center text-stone-400 italic bg-white">
+                    Belum ada data transaksi di bulan ini.
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="text-center text-stone-400 text-sm pb-8 no-print mt-8">
+        </footer>
+
+    </main>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- State Management ---
+        const state = {
+            transactions: [
+                // Sample data matching guide scenario "Oct-2023"
+                { id: 1, date: '2023-10-01', desc: 'Gaji Bulanan', category: 'Gaji', type: 'income', amount: 5500000 },
+                { id: 2, date: '2023-10-03', desc: 'Belanja Sayur', category: 'Makanan', type: 'expense', amount: 150000 },
+                { id: 3, date: '2023-10-05', desc: 'Bayar Listrik', category: 'Utilitas', type: 'expense', amount: 350000 },
+                { id: 4, date: '2023-10-10', desc: 'Isi Bensin', category: 'Transportasi', type: 'expense', amount: 50000 },
+                { id: 5, date: '2023-10-15', desc: 'Nonton Bioskop', category: 'Hiburan', type: 'expense', amount: 120000 },
+                { id: 6, date: '2023-10-20', desc: 'Makan Luar', category: 'Makanan', type: 'expense', amount: 250000 },
+                // Some data for Sep (to test filter)
+                { id: 7, date: '2023-09-28', desc: 'Gaji September', category: 'Gaji', type: 'income', amount: 5200000 },
+            ],
+            settings: {
+                goal: 2000000,
+                budgetLimit: 3000000
+            },
+            currentMonth: '2023-10', // Default view
+            formType: 'expense' // Default form state
+        };
+
+        // --- Chart Instances ---
+        let barChartInstance = null;
+        let doughnutChartInstance = null;
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initMonthSelector();
+            setTransactionType('expense'); // Init form UI
+            updateUI(); // Initial render
+        });
+
+        // --- Core Logic & Data Processing ---
+
+        function getFilteredTransactions() {
+            return state.transactions.filter(t => t.date.startsWith(state.currentMonth));
+        }
+
+        function calculateSummary(transactions) {
+            let income = 0;
+            let expense = 0;
+            const categoryBreakdown = {};
+
+            transactions.forEach(t => {
+                if (t.type === 'income') {
+                    income += t.amount;
+                } else {
+                    expense += t.amount;
+                    // For Pie Chart
+                    categoryBreakdown[t.category] = (categoryBreakdown[t.category] || 0) + t.amount;
+                }
+            });
+
+            return {
+                income,
+                expense,
+                balance: income - expense,
+                categoryBreakdown
+            };
+        }
+
+        // --- UI Update Functions ---
+
+        function updateUI() {
+            const filteredData = getFilteredTransactions();
+            const summary = calculateSummary(filteredData);
+            
+            // 1. Update KPI Cards
+            document.getElementById('totalIncomeDisplay').textContent = formatRupiah(summary.income);
+            document.getElementById('totalExpenseDisplay').textContent = formatRupiah(summary.expense);
+            document.getElementById('balanceDisplay').textContent = formatRupiah(summary.balance);
+            
+            // Color logic for balance
+            const balEl = document.getElementById('balanceDisplay');
+            if(summary.balance >= 0) {
+                balEl.classList.remove('text-rose-600');
+                balEl.classList.add('text-stone-800');
+            } else {
+                balEl.classList.add('text-rose-600');
+                balEl.classList.remove('text-stone-800');
+            }
+
+            // 2. Update Health Indicators
+            updateHealthIndicators(summary);
+
+            // 3. Update Charts
+            updateCharts(summary);
+
+            // 4. Update Table
+            renderTable(filteredData);
+
+            // 5. Update Print Header
+            const dateObj = new Date(state.currentMonth + "-01");
+            const localeDate = dateObj.toLocaleDateString('id-ID', { year: 'numeric', month: 'long' });
+            document.getElementById('printDatePeriod').textContent = `Periode: ${localeDate}`;
+        }
+
+        function updateHealthIndicators(summary) {
+            // Budget Logic
+            const budgetUsedPct = (summary.expense / state.settings.budgetLimit) * 100;
+            const budgetBar = document.getElementById('budgetProgressBar');
+            const budgetBadge = document.getElementById('budgetStatusBadge');
+            
+            document.getElementById('budgetUsedText').textContent = `Terpakai: ${formatRupiah(summary.expense)}`;
+            document.getElementById('budgetLimitText').textContent = `Limit: ${formatRupiah(state.settings.budgetLimit)}`;
+            
+            budgetBar.style.width = `${Math.min(budgetUsedPct, 100)}%`;
+
+            if (summary.expense > state.settings.budgetLimit) {
+                budgetBadge.textContent = "🔴 OVER BUDGET";
+                budgetBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-700";
+                budgetBar.className = "absolute top-0 left-0 h-full bg-rose-500 transition-all duration-700";
+            } else if (summary.expense > (state.settings.budgetLimit * 0.8)) {
+                budgetBadge.textContent = "🟡 WASPADA";
+                budgetBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700";
+                budgetBar.className = "absolute top-0 left-0 h-full bg-amber-500 transition-all duration-700";
+            } else {
+                budgetBadge.textContent = "🟢 AMAN";
+                budgetBadge.className = "px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700";
+                budgetBar.className = "absolute top-0 left-0 h-full bg-emerald-500 transition-all duration-700";
+            }
+
+            // Savings Logic
+            const savingsPct = Math.max(0, (summary.balance / state.settings.goal) * 100);
+            document.getElementById('savingsProgressBar').style.width = `${Math.min(savingsPct, 100)}%`;
+            document.getElementById('savingsPercentage').textContent = `${savingsPct.toFixed(1)}%`;
+            document.getElementById('currentSavingsText').textContent = `Terkumpul: ${formatRupiah(summary.balance)}`;
+            document.getElementById('goalText').textContent = `Target: ${formatRupiah(state.settings.goal)}`;
+        }
+
+        function renderTable(data) {
+            const tbody = document.getElementById('transactionTableBody');
+            const emptyState = document.getElementById('emptyState');
+            const countLabel = document.getElementById('recordCount');
+            
+            tbody.innerHTML = '';
+            countLabel.textContent = `${data.length} Transaksi`;
+
+            if (data.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                // Sort by date descending
+                const sortedData = [...data].sort((a, b) => new Date(b.date) - new Date(a.date));
+                
+                sortedData.forEach(t => {
+                    const row = document.createElement('tr');
+                    row.className = "bg-white hover:bg-stone-50 border-b border-stone-100 transition";
+                    
+                    const isIncome = t.type === 'income';
+                    const amountClass = isIncome ? 'text-emerald-600 font-bold' : 'text-stone-400';
+                    const expenseClass = !isIncome ? 'text-rose-600 font-bold' : 'text-stone-400';
+
+                    row.innerHTML = `
+                        <td class="px-4 py-3 whitespace-nowrap">${t.date}</td>
+                        <td class="px-4 py-3 font-medium text-stone-800">${t.desc}</td>
+                        <td class="px-4 py-3"><span class="bg-stone-100 text-stone-600 px-2 py-0.5 rounded text-xs border border-stone-200">${t.category}</span></td>
+                        <td class="px-4 py-3 text-right ${amountClass}">${isIncome ? formatRupiah(t.amount) : '-'}</td>
+                        <td class="px-4 py-3 text-right ${expenseClass}">${!isIncome ? formatRupiah(t.amount) : '-'}</td>
+                        <td class="px-4 py-3 text-center no-print">
+                            <button onclick="deleteTransaction(${t.id})" class="text-stone-300 hover:text-rose-500 transition" title="Hapus">
+                                🗑️
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+
+        // --- Chart.js Implementations ---
+
+        function updateCharts(summary) {
+            // 1. Bar Chart (Income vs Expense)
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            const barData = [summary.income, summary.expense];
+            
+            if (barChartInstance) {
+                barChartInstance.data.datasets[0].data = barData;
+                barChartInstance.update();
+            } else {
+                barChartInstance = new Chart(ctxBar, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Pemasukan', 'Pengeluaran'],
+                        datasets: [{
+                            label: 'Total (Rp)',
+                            data: barData,
+                            backgroundColor: [
+                                'rgba(16, 185, 129, 0.7)', // Emerald
+                                'rgba(244, 63, 94, 0.7)'   // Rose
+                            ],
+                            borderColor: [
+                                'rgba(16, 185, 129, 1)',
+                                'rgba(244, 63, 94, 1)'
+                            ],
+                            borderWidth: 1,
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false, // Critical for container scaling
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: '#f5f5f4' } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
+
+            // 2. Doughnut Chart (Category Breakdown)
+            const ctxPie = document.getElementById('doughnutChart').getContext('2d');
+            const labels = Object.keys(summary.categoryBreakdown);
+            const data = Object.values(summary.categoryBreakdown);
+            
+            // Warm/Neutral/Accent Palette for chart segments
+            const palette = [
+                '#f43f5e', '#f97316', '#eab308', '#84cc16', '#06b6d4', '#6366f1', '#a855f7', '#78716c'
+            ];
+
+            if (doughnutChartInstance) {
+                doughnutChartInstance.data.labels = labels;
+                doughnutChartInstance.data.datasets[0].data = data;
+                doughnutChartInstance.update();
+            } else {
+                doughnutChartInstance = new Chart(ctxPie, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: palette,
+                            borderWidth: 0,
+                            hoverOffset: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                position: 'right',
+                                labels: { font: { size: 11 }, boxWidth: 12 } 
+                            }
+                        },
+                        cutout: '60%'
+                    }
+                });
+            }
+        }
+
+        // --- Interaction Handlers ---
+
+        function initMonthSelector() {
+            // Find all unique months from data + current month
+            const months = new Set(state.transactions.map(t => t.date.slice(0, 7)));
+            months.add(new Date().toISOString().slice(0, 7)); // Ensure current actual month is there
+            
+            const sortedMonths = Array.from(months).sort().reverse();
+            const select = document.getElementById('monthFilter');
+            select.innerHTML = '';
+            
+            sortedMonths.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                // Format YYYY-MM to readable text
+                const date = new Date(m + "-01");
+                opt.text = date.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+                select.appendChild(opt);
+            });
+
+            // Set default selected
+            if (sortedMonths.includes(state.currentMonth)) {
+                select.value = state.currentMonth;
+            } else {
+                state.currentMonth = select.value;
+            }
+
+            select.addEventListener('change', (e) => {
+                state.currentMonth = e.target.value;
+                updateUI();
+            });
+        }
+
+        // Form Type Toggles
+        function setTransactionType(type) {
+            state.formType = type;
+            const btnIn = document.getElementById('btnIncome');
+            const btnOut = document.getElementById('btnExpense');
+            
+            if (type === 'income') {
+                btnIn.classList.remove('bg-stone-50', 'text-stone-500');
+                btnIn.classList.add('bg-emerald-100', 'text-emerald-700', 'border-emerald-300');
+                
+                btnOut.classList.add('bg-stone-50', 'text-stone-500');
+                btnOut.classList.remove('bg-rose-100', 'text-rose-700', 'border-rose-300');
+            } else {
+                btnOut.classList.remove('bg-stone-50', 'text-stone-500');
+                btnOut.classList.add('bg-rose-100', 'text-rose-700', 'border-rose-300');
+                
+                btnIn.classList.add('bg-stone-50', 'text-stone-500');
+                btnIn.classList.remove('bg-emerald-100', 'text-emerald-700', 'border-emerald-300');
+            }
+        }
+
+        // Add Transaction
+        document.getElementById('transactionForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const date = document.getElementById('formDate').value;
+            const desc = document.getElementById('formDesc').value;
+            const category = document.getElementById('formCategory').value;
+            const amount = parseFloat(document.getElementById('formAmount').value);
+
+            if (!date || !desc || !amount) return;
+
+            const newTx = {
+                id: Date.now(),
+                date,
+                desc,
+                category,
+                type: state.formType,
+                amount
+            };
+
+            state.transactions.push(newTx);
+            
+            // If the date added is in a new month not in selector, refresh selector
+            const monthKey = date.slice(0, 7);
+            if (monthKey !== state.currentMonth) {
+                // If user adds data for a different month, switch view to that month or refresh filter?
+                // Let's just refresh filter and switch to it for better UX
+                state.currentMonth = monthKey;
+                initMonthSelector(); 
+            }
+            
+            updateUI();
+            
+            // Reset form fields (keep date)
+            document.getElementById('formDesc').value = '';
+            document.getElementById('formAmount').value = '';
+        });
+
+        function deleteTransaction(id) {
+            if(confirm("Hapus transaksi ini?")) {
+                state.transactions = state.transactions.filter(t => t.id !== id);
+                updateUI();
+            }
+        }
+
+        // Settings Logic
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            panel.classList.toggle('hidden');
+        }
+
+        function saveSettings() {
+            const goal = parseFloat(document.getElementById('settingGoal').value);
+            const budget = parseFloat(document.getElementById('settingBudget').value);
+            
+            if(goal && budget) {
+                state.settings.goal = goal;
+                state.settings.budgetLimit = budget;
+                updateUI();
+                toggleSettings();
+            }
+        }
+
+        // Helper: Format Rupiah
+        function formatRupiah(num) {
+            return new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0
+            }).format(num);
+        }
+
+        // Helper: Format Date for input default
+        // Set today's date in form
+        document.getElementById('formDate').valueAsDate = new Date();
+
+    </script>
+</body>
+</html>
